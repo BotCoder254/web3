@@ -28,6 +28,104 @@ export const Web3Provider = ({ children }) => {
   const [networkId, setNetworkId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [balance, setBalance] = useState('0');
+
+  const getTransactionHistory = async () => {
+    if (!provider || !account) return [];
+
+    try {
+      // Get the last 100 blocks
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = ethers.utils.hexValue(Math.max(0, currentBlock - 100));
+
+      // Get transfer events
+      const singleFilter = {
+        address: TOKEN_CONTRACT_ADDRESS,
+        topics: [
+          ethers.utils.id("TransferSingle(address,address,address,uint256,uint256)"),
+          null,
+          ethers.utils.hexZeroPad(account, 32),
+          null
+        ],
+        fromBlock,
+        toBlock: 'latest'
+      };
+
+      const batchFilter = {
+        address: TOKEN_CONTRACT_ADDRESS,
+        topics: [
+          ethers.utils.id("TransferBatch(address,address,address,uint256[],uint256[])"),
+          null,
+          ethers.utils.hexZeroPad(account, 32),
+          null
+        ],
+        fromBlock,
+        toBlock: 'latest'
+      };
+
+      const [singleEvents, batchEvents] = await Promise.all([
+        provider.getLogs(singleFilter),
+        provider.getLogs(batchFilter)
+      ]);
+
+      // Process events
+      const processedEvents = await Promise.all([
+        ...singleEvents.map(async (event) => {
+          const block = await provider.getBlock(event.blockNumber);
+          const tx = await provider.getTransaction(event.transactionHash);
+          const decodedData = tokenContract.interface.decodeEventLog(
+            "TransferSingle",
+            event.data,
+            event.topics
+          );
+          return {
+            type: 'Transfer',
+            hash: event.transactionHash,
+            timestamp: block.timestamp * 1000,
+            from: decodedData.from,
+            to: decodedData.to,
+            value: decodedData.value.toString(),
+            tokenId: decodedData.id.toString()
+          };
+        }),
+        ...batchEvents.map(async (event) => {
+          const block = await provider.getBlock(event.blockNumber);
+          const tx = await provider.getTransaction(event.transactionHash);
+          const decodedData = tokenContract.interface.decodeEventLog(
+            "TransferBatch",
+            event.data,
+            event.topics
+          );
+          return {
+            type: 'BatchTransfer',
+            hash: event.transactionHash,
+            timestamp: block.timestamp * 1000,
+            from: decodedData.from,
+            to: decodedData.to,
+            values: decodedData.values.map(v => v.toString()),
+            tokenIds: decodedData.ids.map(id => id.toString())
+          };
+        })
+      ]);
+
+      return processedEvents.sort((a, b) => b.timestamp - a.timestamp);
+    } catch (error) {
+      console.error('Error fetching transaction history:', error);
+      return [];
+    }
+  };
+
+  const updateBalance = async () => {
+    if (provider && account) {
+      try {
+        const balance = await provider.getBalance(account);
+        setBalance(ethers.utils.formatEther(balance));
+      } catch (error) {
+        console.error('Error fetching balance:', error);
+        setBalance('0');
+      }
+    }
+  };
 
   const connectWallet = async () => {
     try {
@@ -64,6 +162,9 @@ export const Web3Provider = ({ children }) => {
       setNftContract(nftContract);
       setNetworkId(network.chainId);
       setError(null);
+
+      // Update balance after connecting
+      await updateBalance();
     } catch (error) {
       console.error('Wallet connection error:', error);
       setError(error.message);
@@ -82,13 +183,15 @@ export const Web3Provider = ({ children }) => {
     setTokenContract(null);
     setNftContract(null);
     setNetworkId(null);
+    setBalance('0');
   };
 
-  const handleAccountsChanged = (accounts) => {
+  const handleAccountsChanged = async (accounts) => {
     if (accounts.length === 0) {
       disconnectWallet();
     } else {
       setAccount(accounts[0]);
+      await updateBalance();
     }
   };
 
@@ -126,6 +229,14 @@ export const Web3Provider = ({ children }) => {
     };
   }, []);
 
+  // Update balance periodically
+  useEffect(() => {
+    if (provider && account) {
+      const interval = setInterval(updateBalance, 15000); // Every 15 seconds
+      return () => clearInterval(interval);
+    }
+  }, [provider, account]);
+
   const value = {
     account,
     provider,
@@ -135,8 +246,10 @@ export const Web3Provider = ({ children }) => {
     networkId,
     loading,
     error,
+    balance,
     connectWallet,
     disconnectWallet,
+    getTransactionHistory,
     TOKEN_CONTRACT_ADDRESS,
     NFT_CONTRACT_ADDRESS
   };
