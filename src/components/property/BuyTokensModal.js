@@ -39,7 +39,16 @@ const BuyTokensModal = ({ property, onClose }) => {
     setError('');
 
     try {
-      await buyTokens(property.id, parseFloat(amount));
+      // Convert amount to Wei
+      const amountInWei = web3.utils.toWei(amount.toString(), 'ether');
+      const priceInWei = web3.utils.toWei(property.tokenPrice.toString(), 'ether');
+      const totalCost = web3.utils.toBN(amountInWei).mul(web3.utils.toBN(priceInWei));
+
+      await buyTokens(property.id, amountInWei, {
+        value: totalCost.toString(),
+        from: web3.eth.defaultAccount
+      });
+
       onClose();
     } catch (error) {
       console.error('Error buying tokens:', error);

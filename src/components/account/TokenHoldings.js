@@ -17,25 +17,42 @@ const TokenHoldings = () => {
 
   const loadHoldings = async () => {
     try {
+      if (!web3) {
+        setLoading(false);
+        return;
+      }
+
       const tokenizedProperties = await propertyService.getTokenizedProperties();
       const holdingsData = await Promise.all(
         tokenizedProperties.map(async (property) => {
-          const balance = await getTokenBalance(property.id);
-          const ownership = (balance / property.totalSupply) * 100;
-          const value = (property.price * balance) / property.totalSupply;
-          
-          return {
-            ...property,
-            balance,
-            ownership,
-            value
-          };
+          try {
+            const balance = await getTokenBalance(property.id);
+            const balanceInEther = web3.utils.fromWei(balance, 'ether');
+            const totalSupply = web3.utils.fromWei(property.totalSupply, 'ether');
+            const ownership = (parseFloat(balanceInEther) / parseFloat(totalSupply)) * 100;
+            const value = (parseFloat(property.price) * parseFloat(balanceInEther)) / parseFloat(totalSupply);
+            
+            return {
+              ...property,
+              balance: balanceInEther,
+              ownership,
+              value: web3.utils.toWei(value.toString(), 'ether')
+            };
+          } catch (error) {
+            console.error(`Error loading holding for property ${property.id}:`, error);
+            return null;
+          }
         })
       );
 
-      const filteredHoldings = holdingsData.filter(holding => holding.balance > 0);
+      const filteredHoldings = holdingsData.filter(holding => holding && parseFloat(holding.balance) > 0);
       setHoldings(filteredHoldings);
-      setTotalValue(filteredHoldings.reduce((sum, holding) => sum + holding.value, 0));
+      
+      const totalValueWei = filteredHoldings.reduce((sum, holding) => {
+        return sum.add(web3.utils.toBN(holding.value));
+      }, web3.utils.toBN(0));
+      
+      setTotalValue(totalValueWei.toString());
     } catch (error) {
       console.error('Error loading holdings:', error);
     } finally {

@@ -56,14 +56,12 @@ const PropertyBrowser = () => {
 
   const getPropertyStatus = (property) => {
     if (property.isTokenized) return 'Buy Tokens';
-    if (property.status === 'pending') return 'Coming Soon';
     return 'Not Available';
   };
 
   const getStatusColor = (property) => {
     if (property.isTokenized) return 'bg-green-500';
-    if (property.status === 'pending') return 'bg-yellow-500';
-    return 'bg-gray-500';
+    return 'bg-gray-400';
   };
 
   const filteredProperties = properties.filter(property => {

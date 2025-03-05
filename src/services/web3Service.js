@@ -91,12 +91,26 @@ class Web3Service {
     }
   }
 
-  async purchaseTokens(propertyId, amount, price) {
+  async purchaseTokens(propertyId, amount, options = {}) {
     try {
-      const totalCost = amount * price;
+      if (!this.tokenContract) {
+        throw new Error('Token contract not initialized');
+      }
+
+      // Ensure propertyId is properly formatted
+      const propertyIdNum = Web3.utils.hexToNumber(
+        Web3.utils.keccak256(propertyId.toString()).slice(0, 10)
+      );
+
+      // Call the contract method with proper parameters
       return await this.tokenContract.methods
-        .purchaseTokens(propertyId, amount)
-        .send({ from: this.account, value: totalCost });
+        .purchaseTokens(propertyIdNum.toString(), amount)
+        .send({
+          from: this.account,
+          value: options.value || '0',
+          gas: '300000',
+          ...options
+        });
     } catch (error) {
       console.error('Error purchasing tokens:', error);
       throw error;
