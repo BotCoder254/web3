@@ -39,7 +39,7 @@ contract RealEstateToken is ERC20, Ownable {
             "Not enough tokens available"
         );
 
-        uint256 totalPrice = amount * propertyToPrice[propertyId];
+        uint256 totalPrice = (amount * propertyToPrice[propertyId]) / (10 ** decimals());
         require(msg.value >= totalPrice, "Insufficient payment");
 
         _transfer(address(this), msg.sender, amount);
