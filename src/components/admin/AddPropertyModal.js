@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FaTimes, FaImage, FaUpload } from 'react-icons/fa';
 import { usePropertyService } from '../../services/propertyService';
 import { useWeb3 } from '../../contexts/Web3Context';
+import { ethers } from 'ethers';
 
 const AddPropertyModal = ({ property, onClose, onSave }) => {
   const [formData, setFormData] = useState({
@@ -21,21 +22,47 @@ const AddPropertyModal = ({ property, onClose, onSave }) => {
   const [images, setImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const propertyService = usePropertyService();
-  const { web3 } = useWeb3();
+  const { web3, provider } = useWeb3();
+
+  const convertToEth = (value) => {
+    if (!value) return '';
+    try {
+      // If value is in Wei
+      if (value.toString().length > 18) {
+        return web3 ? web3.utils.fromWei(value.toString(), 'ether') 
+          : ethers.utils.formatEther(value.toString());
+      }
+      return value.toString();
+    } catch (error) {
+      console.error('Error converting to ETH:', error);
+      return value?.toString() || '';
+    }
+  };
+
+  const convertToWei = (value) => {
+    if (!value) return '0';
+    try {
+      return web3 ? web3.utils.toWei(value.toString(), 'ether')
+        : ethers.utils.parseEther(value.toString()).toString();
+    } catch (error) {
+      console.error('Error converting to Wei:', error);
+      return '0';
+    }
+  };
 
   useEffect(() => {
     if (property) {
       setFormData({
         ...property,
-        price: property.price ? web3.utils.fromWei(property.price.toString(), 'ether') : '',
+        price: convertToEth(property.price),
         tokenSupply: property.tokenSupply?.toString() || '',
-        tokenPrice: property.tokenPrice ? web3.utils.fromWei(property.tokenPrice.toString(), 'ether') : ''
+        tokenPrice: convertToEth(property.tokenPrice)
       });
       if (property.imageUrl) {
         setImagePreviews([property.imageUrl]);
       }
     }
-  }, [property, web3]);
+  }, [property]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -66,11 +93,10 @@ const AddPropertyModal = ({ property, onClose, onSave }) => {
   };
 
   useEffect(() => {
-    // Cleanup previews on unmount
     return () => {
       imagePreviews.forEach(preview => URL.revokeObjectURL(preview));
     };
-  }, []);
+  }, [imagePreviews]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -79,9 +105,9 @@ const AddPropertyModal = ({ property, onClose, onSave }) => {
     try {
       const propertyData = {
         ...formData,
-        price: web3.utils.toWei(formData.price.toString(), 'ether'),
-        tokenPrice: web3.utils.toWei(formData.tokenPrice.toString(), 'ether'),
-        tokenSupply: parseInt(formData.tokenSupply),
+        price: convertToWei(formData.price),
+        tokenPrice: convertToWei(formData.tokenPrice),
+        tokenSupply: parseInt(formData.tokenSupply) || 0,
         updatedAt: new Date().toISOString()
       };
 
