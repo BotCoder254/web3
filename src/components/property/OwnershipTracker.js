@@ -6,50 +6,123 @@ import { usePropertyService } from '../../services/propertyService';
 import { useAuth } from '../../contexts/AuthContext';
 import { ethers } from 'ethers';
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
 const OwnershipTracker = () => {
   const [ownedProperties, setOwnedProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalValue, setTotalValue] = useState(0);
-  const { provider, account, tokenContract } = useWeb3();
+  const [error, setError] = useState(null);
+  const { provider, account, tokenContract, TOKEN_CONTRACT_ADDRESS } = useWeb3();
   const propertyService = usePropertyService();
   const { currentUser } = useAuth();
 
-  useEffect(() => {
-    if (currentUser && provider && account) {
-      loadOwnedProperties();
+  const fetchBalanceWithRetry = async (tokenId, retries = 0) => {
+    try {
+      const balance = await tokenContract.balanceOf(account, tokenId);
+      const totalSupply = await tokenContract.totalSupply(tokenId);
+      return { balance, totalSupply };
+    } catch (error) {
+      if (retries < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return fetchBalanceWithRetry(tokenId, retries + 1);
+      }
+      throw error;
     }
-  }, [currentUser, provider, account]);
+  };
+
+  const fetchPropertyWithRetry = async (tokenId, retries = 0) => {
+    try {
+      return await propertyService.getPropertyById(tokenId.toString());
+    } catch (error) {
+      if (retries < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return fetchPropertyWithRetry(tokenId, retries + 1);
+      }
+      throw error;
+    }
+  };
 
   const loadOwnedProperties = async () => {
     try {
-      if (!tokenContract || !account) return;
+      if (!tokenContract || !account) {
+        setLoading(false);
+        return;
+      }
 
+      setError(null);
       const ownedTokens = await tokenContract.getTokensOfOwner(account);
+      
       const properties = await Promise.all(
         ownedTokens.map(async (tokenId) => {
-          const property = await propertyService.getPropertyById(tokenId.toString());
-          const balance = await tokenContract.balanceOf(account, tokenId);
-          const totalSupply = await tokenContract.totalSupply(tokenId);
-          const value = property.price.mul(balance).div(totalSupply);
-          
-          return {
-            ...property,
-            tokenBalance: balance.toString(),
-            ownership: (Number(balance) / Number(totalSupply)) * 100,
-            value: value.toString()
-          };
+          try {
+            const [property, { balance, totalSupply }] = await Promise.all([
+              fetchPropertyWithRetry(tokenId),
+              fetchBalanceWithRetry(tokenId)
+            ]);
+
+            if (!property || !balance || !totalSupply) {
+              console.error(`Invalid data for property ${tokenId}`);
+              return null;
+            }
+
+            // Ensure price is a BigNumber
+            const price = ethers.BigNumber.isBigNumber(property.price) 
+              ? property.price 
+              : ethers.BigNumber.from(property.price.toString());
+
+            const value = price.mul(balance).div(totalSupply);
+            
+            return {
+              ...property,
+              tokenBalance: balance.toString(),
+              ownership: (Number(balance) / Number(totalSupply)) * 100,
+              value: value.toString()
+            };
+          } catch (error) {
+            console.error(`Error loading property ${tokenId}:`, error);
+            return null;
+          }
         })
       );
 
-      setOwnedProperties(properties);
-      const total = properties.reduce((sum, prop) => sum.add(ethers.BigNumber.from(prop.value)), ethers.BigNumber.from(0));
+      const validProperties = properties.filter(Boolean);
+      
+      if (validProperties.length === 0 && properties.length > 0) {
+        setError('Failed to load property data. Please try again.');
+      }
+
+      setOwnedProperties(validProperties);
+      
+      const total = validProperties.reduce((sum, prop) => {
+        try {
+          return sum.add(ethers.BigNumber.from(prop.value));
+        } catch (error) {
+          console.error('Error adding property value:', error);
+          return sum;
+        }
+      }, ethers.BigNumber.from(0));
+      
       setTotalValue(total.toString());
     } catch (error) {
       console.error('Error loading owned properties:', error);
+      setError('Failed to load properties. Please check your connection and try again.');
+      setOwnedProperties([]);
+      setTotalValue('0');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (currentUser && provider && account && TOKEN_CONTRACT_ADDRESS && 
+        TOKEN_CONTRACT_ADDRESS !== '0x0000000000000000000000000000000000000000') {
+      loadOwnedProperties();
+    } else {
+      setLoading(false);
+    }
+  }, [currentUser, provider, account, TOKEN_CONTRACT_ADDRESS]);
 
   if (loading) {
     return (
@@ -87,12 +160,20 @@ const OwnershipTracker = () => {
             </div>
           </div>
 
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              {error}
+            </div>
+          )}
+
           {ownedProperties.length === 0 ? (
             <div className="text-center py-12">
               <FaChartPie className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No Properties Owned</h3>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">
+                {error ? 'Error Loading Properties' : 'No Properties Owned'}
+              </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Start your real estate journey by purchasing property tokens.
+                {error ? 'Please try refreshing the page.' : 'Start your real estate journey by purchasing property tokens.'}
               </p>
             </div>
           ) : (
@@ -109,6 +190,10 @@ const OwnershipTracker = () => {
                       src={property.imageUrl}
                       alt={property.name}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.src = '/placeholder-property.jpg';
+                        e.target.onerror = null;
+                      }}
                     />
                     <div className="absolute top-2 right-2 px-2 py-1 bg-primary text-white text-xs rounded-full">
                       {property.ownership.toFixed(2)}% Owned

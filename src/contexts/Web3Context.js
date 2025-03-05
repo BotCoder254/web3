@@ -7,6 +7,9 @@ const Web3Context = createContext();
 
 export const useWeb3 = () => useContext(Web3Context);
 
+const TOKEN_CONTRACT_ADDRESS = process.env.REACT_APP_TOKEN_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
+const NFT_CONTRACT_ADDRESS = process.env.REACT_APP_NFT_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
+
 export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
   const [provider, setProvider] = useState(null);
@@ -32,15 +35,15 @@ export const Web3Provider = ({ children }) => {
       const signer = provider.getSigner();
       const network = await provider.getNetwork();
 
-      // Initialize contracts
+      // Initialize contracts with fallback addresses
       const tokenContract = new ethers.Contract(
-        process.env.REACT_APP_TOKEN_CONTRACT_ADDRESS,
+        TOKEN_CONTRACT_ADDRESS,
         RealEstateToken.abi,
         signer
       );
 
       const nftContract = new ethers.Contract(
-        process.env.REACT_APP_NFT_CONTRACT_ADDRESS,
+        NFT_CONTRACT_ADDRESS,
         RealEstateNFT.abi,
         signer
       );
@@ -55,6 +58,9 @@ export const Web3Provider = ({ children }) => {
     } catch (error) {
       console.error('Wallet connection error:', error);
       setError(error.message);
+      // Reset contracts on error
+      setTokenContract(null);
+      setNftContract(null);
     } finally {
       setLoading(false);
     }
@@ -122,6 +128,8 @@ export const Web3Provider = ({ children }) => {
     error,
     connectWallet,
     disconnectWallet,
+    TOKEN_CONTRACT_ADDRESS,
+    NFT_CONTRACT_ADDRESS
   };
 
   return <Web3Context.Provider value={value}>{children}</Web3Context.Provider>;
