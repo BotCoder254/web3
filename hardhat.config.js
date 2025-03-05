@@ -1,11 +1,15 @@
 require("@nomiclabs/hardhat-waffle");
-require("@nomiclabs/hardhat-etherscan");
+require("@nomiclabs/hardhat-ethers");
 require('dotenv').config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: "0.8.19",
   networks: {
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 1337,
+    },
     hardhat: {
       chainId: 1337
     },
@@ -25,6 +29,6 @@ module.exports = {
     sources: "./contracts",
     tests: "./test",
     cache: "./cache",
-    artifacts: "./artifacts"
+    artifacts: "./src/artifacts"
   }
 }; 

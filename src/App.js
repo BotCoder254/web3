@@ -23,6 +23,7 @@ import WalletConnect from './components/wallet/WalletConnect';
 import TokenTransfer from './components/wallet/TokenTransfer';
 import WalletBalance from './components/wallet/WalletBalance';
 import NotFound from './components/layout/NotFound';
+import { TokenProvider } from './contexts/TokenContext';
 
 const HomePage = () => (
   <MainLayout>
@@ -55,70 +56,72 @@ function App() {
     <AuthProvider>
       <AdminProvider>
         <Web3Provider>
-          <Router>
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<SignUp />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/properties" element={
-                <DashboardLayout>
-                  <PropertyBrowser />
-                </DashboardLayout>
-              } />
-
-              {/* Protected Routes */}
-              <Route path="/dashboard" element={
-                <PrivateRoute>
+          <TokenProvider>
+            <Router>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<HomePage />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<SignUp />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/properties" element={
                   <DashboardLayout>
-                    <AccountDashboard />
+                    <PropertyBrowser />
                   </DashboardLayout>
-                </PrivateRoute>
-              } />
+                } />
 
-              <Route path="/my-properties" element={
-                <PrivateRoute>
-                  <DashboardLayout>
-                    <OwnershipTracker />
-                  </DashboardLayout>
-                </PrivateRoute>
-              } />
+                {/* Protected Routes */}
+                <Route path="/dashboard" element={
+                  <PrivateRoute>
+                    <DashboardLayout>
+                      <AccountDashboard />
+                    </DashboardLayout>
+                  </PrivateRoute>
+                } />
 
-              <Route path="/tokenize" element={
-                <PrivateRoute>
-                  <DashboardLayout>
-                    <TokenizeProperty />
-                  </DashboardLayout>
-                </PrivateRoute>
-              } />
+                <Route path="/my-properties" element={
+                  <PrivateRoute>
+                    <DashboardLayout>
+                      <OwnershipTracker />
+                    </DashboardLayout>
+                  </PrivateRoute>
+                } />
 
-              <Route path="/wallet" element={
-                <PrivateRoute>
-                  <DashboardLayout>
-                    <WalletPage />
-                  </DashboardLayout>
-                </PrivateRoute>
-              } />
+                <Route path="/tokenize" element={
+                  <PrivateRoute>
+                    <DashboardLayout>
+                      <TokenizeProperty />
+                    </DashboardLayout>
+                  </PrivateRoute>
+                } />
 
-              {/* Admin Routes */}
-              <Route path="/admin" element={
-                <PrivateRoute requireAdmin>
-                  <DashboardLayout>
-                    <AdminDashboard />
-                  </DashboardLayout>
-                </PrivateRoute>
-              }>
-                <Route index element={<Navigate to="properties" replace />} />
-                <Route path="properties" element={<PropertyManagement />} />
-                <Route path="transactions" element={<TransactionLogs />} />
-                <Route path="users" element={<UserManagement />} />
-              </Route>
+                <Route path="/wallet" element={
+                  <PrivateRoute>
+                    <DashboardLayout>
+                      <WalletPage />
+                    </DashboardLayout>
+                  </PrivateRoute>
+                } />
 
-              {/* 404 Route */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Router>
+                {/* Admin Routes */}
+                <Route path="/admin" element={
+                  <PrivateRoute requireAdmin>
+                    <DashboardLayout>
+                      <AdminDashboard />
+                    </DashboardLayout>
+                  </PrivateRoute>
+                }>
+                  <Route index element={<Navigate to="properties" replace />} />
+                  <Route path="properties" element={<PropertyManagement />} />
+                  <Route path="transactions" element={<TransactionLogs />} />
+                  <Route path="users" element={<UserManagement />} />
+                </Route>
+
+                {/* 404 Route */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Router>
+          </TokenProvider>
         </Web3Provider>
       </AdminProvider>
     </AuthProvider>

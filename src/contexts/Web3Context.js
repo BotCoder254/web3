@@ -5,7 +5,13 @@ import RealEstateNFT from '../contracts/RealEstateNFT.json';
 
 const Web3Context = createContext();
 
-export const useWeb3 = () => useContext(Web3Context);
+export const useWeb3 = () => {
+  const context = useContext(Web3Context);
+  if (!context) {
+    throw new Error('useWeb3 must be used within a Web3Provider');
+  }
+  return context;
+};
 
 const TOKEN_CONTRACT_ADDRESS = process.env.REACT_APP_TOKEN_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
 const NFT_CONTRACT_ADDRESS = process.env.REACT_APP_NFT_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
@@ -20,8 +26,10 @@ const ERC1155_INTERFACE = new ethers.utils.Interface([
 ]);
 
 export const Web3Provider = ({ children }) => {
-  const [account, setAccount] = useState(null);
   const [provider, setProvider] = useState(null);
+  const [account, setAccount] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [chainId, setChainId] = useState(null);
   const [signer, setSigner] = useState(null);
   const [tokenContract, setTokenContract] = useState(null);
   const [nftContract, setNftContract] = useState(null);
@@ -133,98 +141,116 @@ export const Web3Provider = ({ children }) => {
         throw new Error('Please install MetaMask to use this feature');
       }
 
-      setLoading(true);
+      // Request account access
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      
+      // Switch to the correct network if needed
+      const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const targetChainId = '0x539'; // Chain ID 1337 in hex
+      
+      if (currentChainId !== targetChainId) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: targetChainId }],
+          });
+        } catch (switchError) {
+          // If the network doesn't exist, add it
+          if (switchError.code === 4902) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: targetChainId,
+                chainName: 'Localhost 8545',
+                nativeCurrency: {
+                  name: 'ETH',
+                  symbol: 'ETH',
+                  decimals: 18
+                },
+                rpcUrls: ['http://127.0.0.1:8545'],
+              }],
+            });
+          } else {
+            throw switchError;
+          }
+        }
+      }
+
+      // Initialize provider
       const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      });
-
-      const signer = provider.getSigner();
-      const network = await provider.getNetwork();
-
-      // Initialize contracts with ERC1155 interface
-      const tokenContract = new ethers.Contract(
-        TOKEN_CONTRACT_ADDRESS,
-        [...ERC1155_INTERFACE.fragments, ...RealEstateToken.abi],
-        signer
-      );
-
-      const nftContract = new ethers.Contract(
-        NFT_CONTRACT_ADDRESS,
-        RealEstateNFT.abi,
-        signer
-      );
-
-      setAccount(accounts[0]);
       setProvider(provider);
-      setSigner(signer);
-      setTokenContract(tokenContract);
-      setNftContract(nftContract);
-      setNetworkId(network.chainId);
+      setAccount(accounts[0]);
+      setIsConnected(true);
+      setChainId(targetChainId);
       setError(null);
 
-      // Update balance after connecting
-      await updateBalance();
-    } catch (error) {
-      console.error('Wallet connection error:', error);
-      setError(error.message);
-      // Reset contracts on error
-      setTokenContract(null);
-      setNftContract(null);
-    } finally {
-      setLoading(false);
+      console.log('Wallet connected:', {
+        account: accounts[0],
+        chainId: targetChainId,
+        provider: 'MetaMask'
+      });
+    } catch (err) {
+      console.error('Failed to connect wallet:', err);
+      setError(err.message);
+      setIsConnected(false);
     }
   };
 
   const disconnectWallet = () => {
-    setAccount(null);
     setProvider(null);
-    setSigner(null);
-    setTokenContract(null);
-    setNftContract(null);
-    setNetworkId(null);
-    setBalance('0');
-  };
-
-  const handleAccountsChanged = async (accounts) => {
-    if (accounts.length === 0) {
-      disconnectWallet();
-    } else {
-      setAccount(accounts[0]);
-      await updateBalance();
-    }
-  };
-
-  const handleChainChanged = (chainId) => {
-    window.location.reload();
+    setAccount(null);
+    setIsConnected(false);
+    setChainId(null);
+    setError(null);
   };
 
   useEffect(() => {
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      window.ethereum.on('chainChanged', handleChainChanged);
-
-      // Check if already connected
-      window.ethereum.request({ method: 'eth_accounts' })
-        .then(accounts => {
+    const init = async () => {
+      if (window.ethereum) {
+        try {
+          // Check if already connected
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
           if (accounts.length > 0) {
-            connectWallet();
-          } else {
-            setLoading(false);
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            setProvider(provider);
+            setAccount(accounts[0]);
+            setIsConnected(true);
+            const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+            setChainId(chainId);
           }
-        })
-        .catch(error => {
-          console.error('Error checking wallet connection:', error);
-          setLoading(false);
-        });
-    } else {
-      setLoading(false);
+        } catch (err) {
+          console.error('Error checking wallet connection:', err);
+        }
+      }
+    };
+
+    init();
+
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length > 0) {
+          setAccount(accounts[0]);
+          setIsConnected(true);
+        } else {
+          disconnectWallet();
+        }
+      });
+
+      window.ethereum.on('chainChanged', (chainId) => {
+        setChainId(chainId);
+        window.location.reload();
+      });
+
+      window.ethereum.on('disconnect', () => {
+        disconnectWallet();
+      });
     }
 
     return () => {
       if (window.ethereum) {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
+        window.ethereum.removeListener('accountsChanged', () => {});
+        window.ethereum.removeListener('chainChanged', () => {});
+        window.ethereum.removeListener('disconnect', () => {});
       }
     };
   }, []);
@@ -238,8 +264,10 @@ export const Web3Provider = ({ children }) => {
   }, [provider, account]);
 
   const value = {
-    account,
     provider,
+    account,
+    isConnected,
+    chainId,
     signer,
     tokenContract,
     nftContract,
