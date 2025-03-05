@@ -10,6 +10,15 @@ export const useWeb3 = () => useContext(Web3Context);
 const TOKEN_CONTRACT_ADDRESS = process.env.REACT_APP_TOKEN_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
 const NFT_CONTRACT_ADDRESS = process.env.REACT_APP_NFT_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
 
+// ERC1155 Interface
+const ERC1155_INTERFACE = new ethers.utils.Interface([
+  'event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value)',
+  'event TransferBatch(address indexed operator, address indexed from, address indexed to, uint256[] ids, uint256[] values)',
+  'function balanceOf(address account, uint256 id) view returns (uint256)',
+  'function balanceOfBatch(address[] accounts, uint256[] ids) view returns (uint256[])',
+  'function getTokensOfOwner(address owner) view returns (uint256[])'
+]);
+
 export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
   const [provider, setProvider] = useState(null);
@@ -35,10 +44,10 @@ export const Web3Provider = ({ children }) => {
       const signer = provider.getSigner();
       const network = await provider.getNetwork();
 
-      // Initialize contracts with fallback addresses
+      // Initialize contracts with ERC1155 interface
       const tokenContract = new ethers.Contract(
         TOKEN_CONTRACT_ADDRESS,
-        RealEstateToken.abi,
+        [...ERC1155_INTERFACE.fragments, ...RealEstateToken.abi],
         signer
       );
 
