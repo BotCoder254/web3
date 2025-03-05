@@ -1,6 +1,7 @@
 import Web3 from 'web3';
 import RealEstateToken from '../contracts/RealEstateToken.json';
 import RealEstateNFT from '../contracts/RealEstateNFT.json';
+import { ethers } from 'ethers';
 
 class Web3Service {
   constructor() {
@@ -21,15 +22,24 @@ class Web3Service {
         const accounts = await this.web3.eth.getAccounts();
         this.account = accounts[0];
 
-        // Initialize contracts
+        // Initialize contracts with proper ABI handling
+        const tokenAbi = RealEstateToken.abi.filter(item => item.type !== 'error');
         this.tokenContract = new this.web3.eth.Contract(
-          RealEstateToken.abi,
-          process.env.REACT_APP_TOKEN_CONTRACT_ADDRESS
+          tokenAbi,
+          process.env.REACT_APP_TOKEN_CONTRACT_ADDRESS,
+          {
+            from: this.account,
+            gas: '1000000'
+          }
         );
 
         this.nftContract = new this.web3.eth.Contract(
           RealEstateNFT.abi,
-          process.env.REACT_APP_NFT_CONTRACT_ADDRESS
+          process.env.REACT_APP_NFT_CONTRACT_ADDRESS,
+          {
+            from: this.account,
+            gas: '1000000'
+          }
         );
 
         // Listen for account changes
@@ -51,9 +61,27 @@ class Web3Service {
   // ERC20 Token Methods
   async tokenizeProperty(propertyId, totalSupply, price) {
     try {
+      // Ensure the contract is initialized
+      if (!this.tokenContract) {
+        throw new Error('Token contract not initialized');
+      }
+
+      // Convert values to proper uint256 format
+      const propertyIdBN = Web3.utils.toBN(propertyId);
+      const totalSupplyBN = Web3.utils.toBN(totalSupply);
+      const priceBN = Web3.utils.toBN(Web3.utils.toWei(price.toString(), 'ether'));
+
+      // Call the contract method with proper Web3 formatting
       return await this.tokenContract.methods
-        .tokenizeProperty(propertyId, totalSupply, price)
-        .send({ from: this.account });
+        .tokenizeProperty(
+          propertyIdBN.toString(),
+          totalSupplyBN.toString(),
+          priceBN.toString()
+        )
+        .send({ 
+          from: this.account,
+          gas: '300000'
+        });
     } catch (error) {
       console.error('Error tokenizing property:', error);
       throw error;

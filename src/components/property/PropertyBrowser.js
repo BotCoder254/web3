@@ -24,15 +24,25 @@ const PropertyBrowser = () => {
   const loadProperties = async () => {
     try {
       const propertiesList = await propertyService.getAllProperties();
-      setProperties(propertiesList);
+      // Ensure all properties have a price value
+      const processedProperties = propertiesList.map(property => ({
+        ...property,
+        price: property.price || property.tokenPrice || '0'
+      }));
+      setProperties(processedProperties);
     } catch (error) {
       console.error('Error loading properties:', error);
+      setProperties([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleBuyTokens = (property) => {
+    if (!property || !property.price) {
+      console.error('Invalid property or price not set');
+      return;
+    }
     setSelectedProperty(property);
     setShowBuyModal(true);
   };
