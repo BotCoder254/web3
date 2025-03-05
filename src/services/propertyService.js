@@ -19,91 +19,78 @@ class PropertyService {
   }
 
   async getAllProperties() {
-    try {
-      const snapshot = await getDocs(this.collection);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-    } catch (error) {
-      console.error('Error getting properties:', error);
-      throw error;
-    }
+    const snapshot = await getDocs(this.collection);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
   }
 
-  async getPropertyById(propertyId) {
-    try {
-      const docRef = doc(this.collection, propertyId);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        return {
-          id: docSnap.id,
-          ...docSnap.data()
-        };
-      } else {
-        throw new Error('Property not found');
-      }
-    } catch (error) {
-      console.error('Error getting property:', error);
-      throw error;
-    }
-  }
-
-  async addProperty(propertyData) {
-    try {
-      // Handle image upload if present
-      if (propertyData.image) {
-        const imageRef = ref(storage, `properties/${Date.now()}_${propertyData.image.name}`);
-        await uploadBytes(imageRef, propertyData.image);
-        propertyData.imageUrl = await getDownloadURL(imageRef);
-        delete propertyData.image;
-      }
-
-      const docRef = await addDoc(this.collection, {
-        ...propertyData,
-        createdAt: new Date(),
-        isTokenized: false,
-        totalSupply: 0
-      });
-
+  async getPropertyById(id) {
+    const docRef = doc(this.collection, id);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
       return {
-        id: docRef.id,
-        ...propertyData
+        id: docSnap.id,
+        ...docSnap.data()
       };
-    } catch (error) {
-      console.error('Error adding property:', error);
-      throw error;
     }
+    return null;
   }
 
-  async updateProperty(propertyId, propertyData) {
-    try {
-      const docRef = doc(this.collection, propertyId);
-      await updateDoc(docRef, {
-        ...propertyData,
-        updatedAt: new Date()
-      });
-
-      return {
-        id: propertyId,
-        ...propertyData
-      };
-    } catch (error) {
-      console.error('Error updating property:', error);
-      throw error;
-    }
+  async createProperty(propertyData) {
+    const docRef = await addDoc(this.collection, {
+      ...propertyData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return docRef.id;
   }
 
-  async deleteProperty(propertyId) {
-    try {
-      const docRef = doc(this.collection, propertyId);
-      await deleteDoc(docRef);
-      return true;
-    } catch (error) {
-      console.error('Error deleting property:', error);
-      throw error;
-    }
+  async updateProperty(id, propertyData) {
+    const docRef = doc(this.collection, id);
+    await updateDoc(docRef, {
+      ...propertyData,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  async deleteProperty(id) {
+    const docRef = doc(this.collection, id);
+    await deleteDoc(docRef);
+  }
+
+  async updatePropertyStatus(id, status) {
+    const docRef = doc(this.collection, id);
+    await updateDoc(docRef, {
+      status,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  async uploadImage(file) {
+    const storageRef = ref(storage, `properties/${Date.now()}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(snapshot.ref);
+    return { url, path: snapshot.ref.fullPath };
+  }
+
+  async getTokenizedProperties() {
+    const q = query(this.collection, where("status", "==", "tokenized"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  }
+
+  async getUserProperties(userId) {
+    const q = query(this.collection, where("ownerId", "==", userId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
   }
 
   async getTokenizedProperties() {
@@ -187,25 +174,6 @@ class PropertyService {
       return querySnapshot.docs.map((doc) => doc.data());
     } catch (error) {
       console.error('Error getting properties by status:', error);
-      throw error;
-    }
-  }
-
-  async updatePropertyStatus(propertyId, status, tokenData = null) {
-    try {
-      const propertyRef = doc(this.collection, propertyId);
-      const updateData = {
-        status,
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (tokenData) {
-        updateData.tokenData = tokenData;
-      }
-
-      await updateDoc(propertyRef, updateData);
-    } catch (error) {
-      console.error('Error updating property status:', error);
       throw error;
     }
   }
