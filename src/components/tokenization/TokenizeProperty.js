@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { FaEthereum, FaUpload } from 'react-icons/fa';
+import { FaEthereum, FaUpload, FaTimes } from 'react-icons/fa';
 import web3Service from '../../services/web3Service';
 import propertyService from '../../services/propertyService';
 
@@ -9,6 +9,7 @@ const TokenizeProperty = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -36,7 +37,32 @@ const TokenizeProperty = () => {
       ...prev,
       images: files,
     }));
+
+    // Generate previews
+    const previews = files.map(file => URL.createObjectURL(file));
+    setImagePreviews(previews);
   };
+
+  const removeImage = (index) => {
+    const newImages = [...formData.images];
+    newImages.splice(index, 1);
+    setFormData(prev => ({
+      ...prev,
+      images: newImages
+    }));
+
+    const newPreviews = [...imagePreviews];
+    URL.revokeObjectURL(newPreviews[index]);
+    newPreviews.splice(index, 1);
+    setImagePreviews(newPreviews);
+  };
+
+  // Clean up previews when component unmounts
+  React.useEffect(() => {
+    return () => {
+      imagePreviews.forEach(preview => URL.revokeObjectURL(preview));
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,23 +115,15 @@ const TokenizeProperty = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          Tokenize Your Property
-        </h1>
-
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-2xl font-bold mb-6">Tokenize Property</h2>
         {error && (
-          <div className="bg-red-50 text-red-500 p-4 rounded-lg mb-6">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
           </div>
         )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -244,30 +262,37 @@ const TokenizeProperty = () => {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2">
               Property Images
             </label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
-              <div className="space-y-1 text-center">
-                <FaUpload className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600">
-                  <label className="relative cursor-pointer bg-white rounded-md font-medium text-primary hover:text-primaryDark">
-                    <span>Upload images</span>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="sr-only"
-                      required
-                    />
-                  </label>
+            <div className="flex flex-wrap gap-4">
+              {imagePreviews.map((preview, index) => (
+                <div key={index} className="relative">
+                  <img
+                    src={preview}
+                    alt={`Preview ${index + 1}`}
+                    className="w-24 h-24 object-cover rounded"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                  >
+                    <FaTimes size={12} />
+                  </button>
                 </div>
-                <p className="text-xs text-gray-500">
-                  PNG, JPG, GIF up to 10MB each
-                </p>
-              </div>
+              ))}
+              <label className="w-24 h-24 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:border-primary">
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+                <FaUpload className="text-gray-400" size={24} />
+              </label>
             </div>
           </div>
 
@@ -282,13 +307,15 @@ const TokenizeProperty = () => {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary"
+              className={`w-full bg-primary text-white py-3 px-4 rounded-md ${
+                loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-primary-dark'
+              }`}
             >
-              {loading ? 'Tokenizing Property...' : 'Tokenize Property'}
+              {loading ? 'Processing...' : 'Tokenize Property'}
             </button>
           </div>
         </form>
-      </motion.div>
+      </div>
     </div>
   );
 };

@@ -24,10 +24,13 @@ const PropertyBrowser = () => {
   const loadProperties = async () => {
     try {
       const propertiesList = await propertyService.getAllProperties();
-      // Ensure all properties have a price value
+      // Process properties to ensure all required fields
       const processedProperties = propertiesList.map(property => ({
         ...property,
-        price: property.price || property.tokenPrice || '0'
+        price: property.price || property.tokenPrice || '0',
+        imageUrl: property.imageUrl || property.images?.[0] || '/placeholder-property.jpg',
+        isTokenized: Boolean(property.isTokenized),
+        status: property.status || (property.isTokenized ? 'tokenized' : 'pending')
       }));
       setProperties(processedProperties);
     } catch (error) {
@@ -39,12 +42,28 @@ const PropertyBrowser = () => {
   };
 
   const handleBuyTokens = (property) => {
-    if (!property || !property.price) {
+    if (!property?.isTokenized) {
+      console.info('Property not yet tokenized');
+      return;
+    }
+    if (!property?.price) {
       console.error('Invalid property or price not set');
       return;
     }
     setSelectedProperty(property);
     setShowBuyModal(true);
+  };
+
+  const getPropertyStatus = (property) => {
+    if (property.isTokenized) return 'Buy Tokens';
+    if (property.status === 'pending') return 'Coming Soon';
+    return 'Not Available';
+  };
+
+  const getStatusColor = (property) => {
+    if (property.isTokenized) return 'bg-green-500';
+    if (property.status === 'pending') return 'bg-yellow-500';
+    return 'bg-gray-500';
   };
 
   const filteredProperties = properties.filter(property => {
@@ -124,10 +143,14 @@ const PropertyBrowser = () => {
                     src={property.imageUrl}
                     alt={property.name}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = '/placeholder-property.jpg';
+                    }}
                   />
                   {property.isTokenized && (
-                    <div className="absolute top-2 right-2 px-2 py-1 bg-green-500 text-white text-xs rounded-full">
-                      Tokenized
+                    <div className={`absolute top-2 right-2 px-2 py-1 ${getStatusColor(property)} text-white text-xs rounded-full`}>
+                      {property.status === 'tokenized' ? 'Tokenized' : 'Pending'}
                     </div>
                   )}
                 </div>
@@ -143,10 +166,14 @@ const PropertyBrowser = () => {
                   </div>
                   <button
                     onClick={() => handleBuyTokens(property)}
-                    className="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className={`w-full ${
+                      property.isTokenized 
+                        ? 'bg-primary hover:bg-primary-dark' 
+                        : 'bg-gray-400 cursor-not-allowed'
+                    } text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary`}
                     disabled={!property.isTokenized}
                   >
-                    {property.isTokenized ? 'Buy Tokens' : 'Coming Soon'}
+                    {getPropertyStatus(property)}
                   </button>
                 </div>
               </motion.div>

@@ -66,18 +66,21 @@ class Web3Service {
         throw new Error('Token contract not initialized');
       }
 
-      // Convert values to proper uint256 format
-      const propertyIdBN = Web3.utils.toBN(propertyId);
-      const totalSupplyBN = Web3.utils.toBN(totalSupply);
-      const priceBN = Web3.utils.toBN(Web3.utils.toWei(price.toString(), 'ether'));
+      // Convert propertyId to a numeric hash that fits in uint256
+      const propertyIdNum = Web3.utils.hexToNumber(
+        Web3.utils.keccak256(propertyId).slice(0, 10)
+      );
+
+      // Convert values to proper uint256 format with safety checks
+      const safePropertyId = Web3.utils.toBN(propertyIdNum).toString();
+      const safeTotalSupply = Web3.utils.toBN(totalSupply).toString();
+      const safePrice = Web3.utils.toBN(
+        Web3.utils.toWei(price.toString(), 'ether')
+      ).toString();
 
       // Call the contract method with proper Web3 formatting
       return await this.tokenContract.methods
-        .tokenizeProperty(
-          propertyIdBN.toString(),
-          totalSupplyBN.toString(),
-          priceBN.toString()
-        )
+        .tokenizeProperty(safePropertyId, safeTotalSupply, safePrice)
         .send({ 
           from: this.account,
           gas: '300000'
