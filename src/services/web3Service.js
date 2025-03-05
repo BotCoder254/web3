@@ -22,25 +22,58 @@ class Web3Service {
         const accounts = await this.web3.eth.getAccounts();
         this.account = accounts[0];
 
-        // Initialize contracts with proper ABI handling
-        const tokenAbi = RealEstateToken.abi.filter(item => item.type !== 'error');
-        this.tokenContract = new this.web3.eth.Contract(
-          tokenAbi,
-          process.env.REACT_APP_TOKEN_CONTRACT_ADDRESS,
-          {
-            from: this.account,
-            gas: '1000000'
-          }
-        );
+        // Get network and ensure we're connected
+        const networkId = await this.web3.eth.net.getId();
+        const networkType = await this.web3.eth.net.getNetworkType();
+        console.log('Connected to network:', { networkId, networkType });
 
-        this.nftContract = new this.web3.eth.Contract(
-          RealEstateNFT.abi,
-          process.env.REACT_APP_NFT_CONTRACT_ADDRESS,
-          {
-            from: this.account,
-            gas: '1000000'
-          }
-        );
+        // Get and verify contract addresses
+        const tokenAddress = process.env.REACT_APP_TOKEN_CONTRACT_ADDRESS;
+        
+        if (!tokenAddress || !this.web3.utils.isAddress(tokenAddress)) {
+          throw new Error('Invalid token contract address');
+        }
+
+        // Check if contract is deployed
+        const code = await this.web3.eth.getCode(tokenAddress);
+        if (code === '0x' || code === '0x0') {
+          throw new Error(`Contract not deployed at ${tokenAddress}`);
+        }
+
+        // Initialize token contract with full error handling
+        try {
+          const tokenAbi = RealEstateToken.abi;
+          this.tokenContract = new this.web3.eth.Contract(
+            tokenAbi,
+            tokenAddress,
+            {
+              from: this.account,
+              gas: '1000000'
+            }
+          );
+
+          // Verify contract is responsive
+          const name = await this.tokenContract.methods.name().call();
+          const symbol = await this.tokenContract.methods.symbol().call();
+          console.log('Token contract verified:', { name, symbol });
+
+        } catch (error) {
+          console.error('Token contract initialization failed:', error);
+          throw new Error('Failed to initialize token contract');
+        }
+
+        // Initialize NFT contract only after token contract is verified
+        const nftAddress = process.env.REACT_APP_NFT_CONTRACT_ADDRESS;
+        if (nftAddress && this.web3.utils.isAddress(nftAddress)) {
+          this.nftContract = new this.web3.eth.Contract(
+            RealEstateNFT.abi,
+            nftAddress,
+            {
+              from: this.account,
+              gas: '1000000'
+            }
+          );
+        }
 
         // Listen for account changes
         window.ethereum.on('accountsChanged', (accounts) => {
@@ -50,7 +83,7 @@ class Web3Service {
         return true;
       } catch (error) {
         console.error('Error initializing Web3:', error);
-        return false;
+        throw error;
       }
     } else {
       console.error('Please install MetaMask!');
@@ -61,30 +94,31 @@ class Web3Service {
   // ERC20 Token Methods
   async tokenizeProperty(propertyId, totalSupply, price) {
     try {
-      // Ensure the contract is initialized
       if (!this.tokenContract) {
         throw new Error('Token contract not initialized');
       }
 
-      // Convert propertyId to a numeric hash that fits in uint256
-      const propertyIdNum = Web3.utils.hexToNumber(
-        Web3.utils.keccak256(propertyId).slice(0, 10)
-      );
+      // Convert string ID to numeric hash
+      const numericId = this.web3.utils.keccak256(propertyId).slice(0, 10);
+      const propertyIdNumber = this.web3.utils.hexToNumber(numericId);
+      
+      const supplyInWei = ethers.utils.parseEther(totalSupply.toString()).toString();
+      const priceInWei = ethers.utils.parseEther(price.toString()).toString();
 
-      // Convert values to proper uint256 format with safety checks
-      const safePropertyId = Web3.utils.toBN(propertyIdNum).toString();
-      const safeTotalSupply = Web3.utils.toBN(totalSupply).toString();
-      const safePrice = Web3.utils.toBN(
-        Web3.utils.toWei(price.toString(), 'ether')
-      ).toString();
+      console.log('Tokenizing property:', {
+        originalId: propertyId,
+        numericId: propertyIdNumber,
+        supply: supplyInWei,
+        price: priceInWei
+      });
 
-      // Call the contract method with proper Web3 formatting
-      return await this.tokenContract.methods
-        .tokenizeProperty(safePropertyId, safeTotalSupply, safePrice)
-        .send({ 
-          from: this.account,
-          gas: '300000'
-        });
+      // Call the contract method with converted values
+      const tx = await this.tokenContract.methods
+        .tokenizeProperty(propertyIdNumber, supplyInWei, priceInWei)
+        .send({ from: this.account });
+
+      console.log('Transaction completed:', tx);
+      return true;
     } catch (error) {
       console.error('Error tokenizing property:', error);
       throw error;
@@ -97,20 +131,18 @@ class Web3Service {
         throw new Error('Token contract not initialized');
       }
 
-      // Ensure propertyId is properly formatted
-      const propertyIdNum = Web3.utils.hexToNumber(
-        Web3.utils.keccak256(propertyId.toString()).slice(0, 10)
-      );
+      const amountInWei = ethers.utils.parseEther(amount.toString());
+      const priceInWei = ethers.utils.parseEther(options.price || '0');
+      const totalPrice = amountInWei.mul(priceInWei).div(ethers.utils.parseEther('1'));
 
-      // Call the contract method with proper parameters
-      return await this.tokenContract.methods
-        .purchaseTokens(propertyIdNum.toString(), amount)
-        .send({
-          from: this.account,
-          value: options.value || '0',
-          gas: '300000',
+      const tx = await this.tokenContract.methods
+        .purchaseTokens(propertyId, amountInWei, {
+          value: totalPrice,
           ...options
         });
+
+      const receipt = await tx.send({ from: this.account });
+      return receipt;
     } catch (error) {
       console.error('Error purchasing tokens:', error);
       throw error;
@@ -169,6 +201,28 @@ class Web3Service {
         .call();
     } catch (error) {
       console.error('Error getting property metadata:', error);
+      throw error;
+    }
+  }
+
+  async getPropertyDetails(propertyId) {
+    try {
+      if (!this.tokenContract) {
+        throw new Error('Token contract not initialized');
+      }
+
+      const details = await this.tokenContract.methods
+        .getPropertyDetails(propertyId)
+        .call();
+      return {
+        exists: details.exists,
+        supply: ethers.utils.formatEther(details.supply || 0),
+        pricePerToken: ethers.utils.formatEther(details.pricePerToken || 0),
+        availableTokens: ethers.utils.formatEther(details.availableTokens || 0),
+        isTokenized: details.isTokenized
+      };
+    } catch (error) {
+      console.error('Error getting property details:', error);
       throw error;
     }
   }
