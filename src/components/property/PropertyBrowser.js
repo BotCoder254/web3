@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FaSearch, FaFilter, FaDollarSign, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaSearch, FaFilter, FaDollarSign, FaMapMarkerAlt, FaEthereum, FaRuler, FaCalendar, FaHome, FaCoins } from 'react-icons/fa';
 import { usePropertyService } from '../../services/propertyService';
 import BuyTokensModal from './BuyTokensModal';
 
@@ -148,29 +148,81 @@ const PropertyBrowser = () => {
                       e.target.src = '/placeholder-property.jpg';
                     }}
                   />
-                  {property.isTokenized && (
-                    <div className={`absolute top-2 right-2 px-2 py-1 ${getStatusColor(property)} text-white text-xs rounded-full`}>
-                      {property.status === 'tokenized' ? 'Tokenized' : 'Pending'}
-                    </div>
-                  )}
+                  <div className="absolute top-0 right-0 p-2 space-y-1">
+                    {property.isTokenized && (
+                      <div className={`px-2 py-1 ${getStatusColor(property)} text-white text-xs rounded-full`}>
+                        {property.status === 'tokenized' ? 'Tokenized' : 'Pending'}
+                      </div>
+                    )}
+                    {property.featured && (
+                      <div className="px-2 py-1 bg-yellow-500 text-white text-xs rounded-full">
+                        Featured
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="p-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{property.name}</h3>
-                  <div className="flex items-center text-gray-600 mb-2">
-                    <FaMapMarkerAlt className="mr-2" />
-                    <span>{property.location}</span>
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900">{property.name}</h3>
+                    <div className="text-right">
+                      <div className="text-primary font-bold">
+                        <FaDollarSign className="inline-block mr-1" />
+                        {Number(property.price).toLocaleString()}
+                      </div>
+                      {property.tokenPrice && (
+                        <div className="text-sm text-gray-600">
+                          <FaEthereum className="inline-block mr-1" />
+                          {Number(property.tokenPrice).toLocaleString()} /token
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center text-gray-600 mb-4">
-                    <FaDollarSign className="mr-2" />
-                    <span>{property.price.toLocaleString()}</span>
+                  
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-gray-600">
+                      <FaMapMarkerAlt className="mr-2" />
+                      <span>{property.location}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                      {property.size && (
+                        <div className="flex items-center">
+                          <FaRuler className="mr-2" />
+                          <span>{Number(property.size).toLocaleString()} sq ft</span>
+                        </div>
+                      )}
+                      {property.yearBuilt && (
+                        <div className="flex items-center">
+                          <FaCalendar className="mr-2" />
+                          <span>Built {property.yearBuilt}</span>
+                        </div>
+                      )}
+                      {property.propertyType && (
+                        <div className="flex items-center">
+                          <FaHome className="mr-2" />
+                          <span>{property.propertyType}</span>
+                        </div>
+                      )}
+                      {property.tokenSupply && (
+                        <div className="flex items-center">
+                          <FaCoins className="mr-2" />
+                          <span>{Number(property.tokenSupply).toLocaleString()} tokens</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  <div className="text-sm text-gray-600 mb-4 line-clamp-2">
+                    {property.description}
+                  </div>
+
                   <button
                     onClick={() => handleBuyTokens(property)}
                     className={`w-full ${
                       property.isTokenized 
                         ? 'bg-primary hover:bg-primary-dark' 
                         : 'bg-gray-400 cursor-not-allowed'
-                    } text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary`}
+                    } text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors duration-200`}
                     disabled={!property.isTokenized}
                   >
                     {getPropertyStatus(property)}
